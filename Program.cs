@@ -1,9 +1,11 @@
-﻿var tokenBucket = new TokenBucket(8000, 1000);
+﻿using Governor;
 
-var worker1 = new Worker("first", () => tokenBucket.WaitAsync(1));
-var worker2 = new Worker("second", () => tokenBucket.WaitAsync(1));
-var worker3 = new Worker("third", () => tokenBucket.WaitAsync(1));
-var worker4 = new Worker("fourth", () => tokenBucket.WaitAsync(1));
+var tokenBucket = new TokenBucket2(12000, 1000);
+
+var worker1 = new Worker("first", () => tokenBucket.WaitAsync(100));
+var worker2 = new Worker("second", () => tokenBucket.WaitAsync(100));
+var worker3 = new Worker("third", () => tokenBucket.WaitAsync(100));
+var worker4 = new Worker("fourth", () => tokenBucket.WaitAsync(100));
 
 tokenBucket.Report = () =>
 {
@@ -64,44 +66,54 @@ public class Worker
     }
 }
 
-public class TokenBucket
+public class TokenBucket2
 {
-    public TokenBucket(int count, int interval)
+    public TokenBucket2(int count, int interval)
     {
-        Clock = new System.Timers.Timer(interval);
-        Clock.Elapsed += (sender, e) => Replenish();
-        Clock.Start();
+        Count = count;
+        CurrentCount = Count;
 
-        Semaphore = new SemaphoreSlim(count, count);
+        Clock = new System.Timers.Timer(interval);
+        Clock.Elapsed += (sender, e) =>
+        {
+            CurrentCount = Count;
+            AutoReset?.Set();
+            Report?.Invoke();
+        };
+
+        Clock.Start();
     }
 
     private int Count { get; set; }
+    private int CurrentCount { get; set; }
     public Action Report { get; set; }
     private System.Timers.Timer Clock { get; set; }
-    private SemaphoreSlim Semaphore { get; set; }
+    private AsyncAutoResetEvent AutoReset { get; set; } = new AsyncAutoResetEvent();
+    private SemaphoreSlim SyncRoot { get; set; } = new SemaphoreSlim(1, 1);
 
     public async Task WaitAsync(int count)
     {
-        for (int i = 0; i < count; i++)
+        if (count > Count)
         {
-            await Semaphore.WaitAsync();
+            throw new ArgumentException("Requested count exceeds max; this will deadlock");
         }
-    }
 
-    private void Replenish()
-    {
-        while (true)
+        await SyncRoot.WaitAsync();
+
+        try
         {
-            try
+            if (CurrentCount >= count)
             {
-                Semaphore.Release();
-            }
-            catch
-            {
-                Report();
+                CurrentCount -= count;
                 return;
             }
-        }
 
+            //Console.WriteLine($"Not enough tokens; requested: {count}, available {CurrentCount}");
+            await AutoReset.WaitAsync();
+        }
+        finally
+        {
+            SyncRoot.Release();
+        }
     }
 }
