@@ -1,11 +1,11 @@
 ﻿using Governor;
 
-var tokenBucket = new TokenBucket2(12000, 1000);
+var tokenBucket = new TokenBucket(12000, 1000);
 
-var worker1 = new Worker("first", () => tokenBucket.WaitAsync(100));
-var worker2 = new Worker("second", () => tokenBucket.WaitAsync(100));
-var worker3 = new Worker("third", () => tokenBucket.WaitAsync(100));
-var worker4 = new Worker("fourth", () => tokenBucket.WaitAsync(100));
+var worker1 = new Worker("first", 500, () => tokenBucket.WaitAsync(1));
+var worker2 = new Worker("second", 1000, () => tokenBucket.WaitAsync(1));
+var worker3 = new Worker("third", 10000, () => tokenBucket.WaitAsync(1));
+var worker4 = new Worker("fourth", 50000, () => tokenBucket.WaitAsync(1));
 
 tokenBucket.Report = () =>
 {
@@ -30,10 +30,13 @@ Console.ReadKey();
 
 public class Worker
 {
-    public Worker(string name, Func<Task> governor)
+    public Worker(string name, int internalLimit, Func<Task> governor)
     {
         Name = name;
         Governor = governor;
+
+        InternalLimit = internalLimit;
+        InternalBucket = new TokenBucket(InternalLimit, 1000);
 
         Clock = new System.Timers.Timer(1000);
         Clock.Elapsed += (sender, e) =>
@@ -54,6 +57,10 @@ public class Worker
     private long LastCount { get; set; }
     public double Rate { get; set; }
 
+    private int InternalLimit { get; set; }
+
+    private TokenBucket InternalBucket { get; set; }
+
     public async void Start()
     {
         Started = DateTime.Now;
@@ -61,59 +68,8 @@ public class Worker
         while (true)
         {
             await Governor();
+            await InternalBucket.WaitAsync(1);
             Count++;
-        }
-    }
-}
-
-public class TokenBucket2
-{
-    public TokenBucket2(int count, int interval)
-    {
-        Count = count;
-        CurrentCount = Count;
-
-        Clock = new System.Timers.Timer(interval);
-        Clock.Elapsed += (sender, e) =>
-        {
-            CurrentCount = Count;
-            AutoReset?.Set();
-            Report?.Invoke();
-        };
-
-        Clock.Start();
-    }
-
-    private int Count { get; set; }
-    private int CurrentCount { get; set; }
-    public Action Report { get; set; }
-    private System.Timers.Timer Clock { get; set; }
-    private AsyncAutoResetEvent AutoReset { get; set; } = new AsyncAutoResetEvent();
-    private SemaphoreSlim SyncRoot { get; set; } = new SemaphoreSlim(1, 1);
-
-    public async Task WaitAsync(int count)
-    {
-        if (count > Count)
-        {
-            throw new ArgumentException("Requested count exceeds max; this will deadlock");
-        }
-
-        await SyncRoot.WaitAsync();
-
-        try
-        {
-            if (CurrentCount >= count)
-            {
-                CurrentCount -= count;
-                return;
-            }
-
-            //Console.WriteLine($"Not enough tokens; requested: {count}, available {CurrentCount}");
-            await AutoReset.WaitAsync();
-        }
-        finally
-        {
-            SyncRoot.Release();
         }
     }
 }
