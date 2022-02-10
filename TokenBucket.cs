@@ -71,9 +71,9 @@
         /// <param name="count">The number of tokens to retrieve.</param>
         /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
         /// <returns>A Task that completes when tokens have been provided.</returns>
-        public Task<int> GetAsync(int count, string name, CancellationToken cancellationToken = default)
+        public Task<int> GetAsync(int count, CancellationToken cancellationToken = default)
         {
-            return GetInternalAsync(Math.Min(count, (int)Math.Min(int.MaxValue, Capacity)), name, cancellationToken);
+            return GetInternalAsync(Math.Min(count, (int)Math.Min(int.MaxValue, Capacity)), cancellationToken);
         }
 
         /// <summary>
@@ -123,12 +123,12 @@
             }
         }
 
-        private async Task<int> GetInternalAsync(int count, string name, CancellationToken cancellationToken = default)
+        private async Task<int> GetInternalAsync(int count, CancellationToken cancellationToken = default)
         {
             Task waitTask = Task.CompletedTask;
 
             await SyncRoot.WaitAsync(cancellationToken).ConfigureAwait(false);
-            Console.WriteLine($"{name} obtained semaphore");
+
             try
             {
                 // if the bucket is empty, wait for a reset, then replenish it before continuing
@@ -141,17 +141,10 @@
                     CurrentCount = Capacity;
                 }
 
-                // if the bucket has enough tokens to fulfil the request, return them and decrement the bucket
-                if (CurrentCount >= count)
-                {
-                    CurrentCount -= count;
-                    return count;
-                }
-
-                // if the bucket doesn't have enough tokens to fulfil the request, return the available
-                // tokens and zero the bucket
-                var availableCount = CurrentCount;
-                CurrentCount = 0;
+                // take the minimum of requested count or CurrentCount, deduct it from
+                // CurrentCount (potentially zeroing the bucket), and return it
+                var availableCount = Math.Min(CurrentCount, count);
+                CurrentCount -= availableCount;
                 return (int)availableCount;
             }
             finally

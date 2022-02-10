@@ -1,11 +1,11 @@
 ﻿using Governor;
 
-var tokenBucket = new TokenBucket(1, 1000);
+var tokenBucket = new TokenBucket(30, 1000);
 
-var worker1 = new Worker("1", 500, () => tokenBucket.GetAsync(1, "1"));
-var worker2 = new Worker("2", 1000, () => tokenBucket.GetAsync(1, "2"));
-var worker3 = new Worker("3", 10000, () => tokenBucket.GetAsync(1, "3"));
-var worker4 = new Worker("4", 50000, () => tokenBucket.GetAsync(1, "4"));
+var worker1 = new Worker("1", 500, () => tokenBucket.GetAsync(10));
+var worker2 = new Worker("2", 1000, () => tokenBucket.GetAsync(10));
+var worker3 = new Worker("3", 10000, () => tokenBucket.GetAsync(10));
+var worker4 = new Worker("4", 50000, () => tokenBucket.GetAsync(10));
 //var worker5 = new Worker("fifth", 500, () => tokenBucket.GetAsync(1));
 //var worker6 = new Worker("sixth", 1000, () => tokenBucket.GetAsync(1));
 //var worker7 = new Worker("seventh", 10000, () => tokenBucket.GetAsync(1));
