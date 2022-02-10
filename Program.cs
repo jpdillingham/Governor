@@ -1,16 +1,15 @@
 ﻿using Governor;
 
-var tokenBucket = new TokenBucket(12000, 1000);
+var tokenBucket = new TokenBucket(1, 1000);
 
-var worker1 = new Worker("first", 500, () => tokenBucket.WaitAsync(1));
-var worker2 = new Worker("second", 1000, () => tokenBucket.WaitAsync(1));
-var worker3 = new Worker("third", 10000, () => tokenBucket.WaitAsync(1));
-var worker4 = new Worker("fourth", 50000, () => tokenBucket.WaitAsync(1));
-
-tokenBucket.Report = () =>
-{
-    Console.WriteLine($"{worker1.Rate}/s \t {worker2.Rate}/s \t {worker3.Rate}/s \t {worker4.Rate}/s \t {worker1.Rate + worker2.Rate + worker3.Rate + worker4.Rate}/s");
-};
+var worker1 = new Worker("1", 500, () => tokenBucket.GetAsync(1, "1"));
+var worker2 = new Worker("2", 1000, () => tokenBucket.GetAsync(1, "2"));
+var worker3 = new Worker("3", 10000, () => tokenBucket.GetAsync(1, "3"));
+var worker4 = new Worker("4", 50000, () => tokenBucket.GetAsync(1, "4"));
+//var worker5 = new Worker("fifth", 500, () => tokenBucket.GetAsync(1));
+//var worker6 = new Worker("sixth", 1000, () => tokenBucket.GetAsync(1));
+//var worker7 = new Worker("seventh", 10000, () => tokenBucket.GetAsync(1));
+//var worker8 = new Worker("eigth", 50000, () => tokenBucket.GetAsync(1));
 
 Task.Run(() => worker1.Start());
 
@@ -25,32 +24,36 @@ Task.Run(async () => {
 });
 
 Task.Run(() => worker4.Start());
+//Task.Run(() => worker5.Start());
+//Task.Run(() => worker6.Start());
+//Task.Run(() => worker7.Start());
+//Task.Run(() => worker8.Start());
 
 Console.ReadKey();
 
 public class Worker
 {
-    public Worker(string name, int internalLimit, Func<Task> governor)
+    public Worker(string name, int internalLimit, Func<Task<int>> governor)
     {
         Name = name;
         Governor = governor;
 
-        InternalLimit = internalLimit;
-        InternalBucket = new TokenBucket(InternalLimit, 1000);
+        //InternalLimit = internalLimit;
+        //InternalBucket = new TokenBucket(InternalLimit, 1000);
 
-        Clock = new System.Timers.Timer(1000);
-        Clock.Elapsed += (sender, e) =>
-        {
-            Rate = Count - LastCount / (DateTime.Now - Timestamp).TotalSeconds;
-            Count = 0;
-            Timestamp = DateTime.Now;
-        };
+        //Clock = new System.Timers.Timer(1000);
+        //Clock.Elapsed += (sender, e) =>
+        //{
+        //    Rate = Count - LastCount / (DateTime.Now - Timestamp).TotalSeconds;
+        //    Count = 0;
+        //    Timestamp = DateTime.Now;
+        //};
 
-        Clock.Start();
+        //Clock.Start();
     }
     private System.Timers.Timer Clock { get; set; }
     private string Name { get; init; }
-    private Func<Task> Governor { get; init; }
+    private Func<Task<int>> Governor { get; init; }
     private DateTime Started { get; set; }
     private DateTime Timestamp { get; set; }
     private long Count { get; set; }
@@ -67,8 +70,15 @@ public class Worker
 
         while (true)
         {
-            await Governor();
-            await InternalBucket.WaitAsync(1);
+            var count = await Governor();
+
+            if (count == 0)
+            {
+                continue;
+            }
+
+            Console.WriteLine($"Got bytes {Name}");
+            //await InternalBucket.GetAsync(1);
             Count++;
         }
     }
